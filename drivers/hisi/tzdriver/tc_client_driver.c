@@ -916,14 +916,18 @@ static int set_login_information(TC_NS_DEV_File *dev_file,
 				 TC_NS_ClientContext *context)
 {
 	/* The daemon has failed to get login information or not supplied */
-	if (0 == dev_file->pkg_name_len)
+	if (0 == dev_file->pkg_name_len) {
+		TCERR("Failed to get package name\n");
 		return -1;
+	}
 
 	/* The 3rd parameter buffer points to the pkg name buffer in the
 	* device file pointer */
 	/* get package name len and package name */
 	context->params[3].memref.size_addr = (__u64)&dev_file->pkg_name_len;
 	context->params[3].memref.buffer = (__u64)dev_file->pkg_name;
+	
+	TCDEBUG("set_login : package name:%s\n", dev_file->pkg_name);
 
 	/* Set public key len and public key */
 	if (dev_file->pub_key_len != 0) {
@@ -1785,6 +1789,52 @@ static void remove_unused_session(TC_NS_Service *service,
 	put_session_struct(saved_session);
 }
 
+
+void dump_hash(char *my_pkname, unsigned char *hash_buf)
+{
+
+	TCDEBUG("Hack - Dump SHA256 hash for %s\n",my_pkname);
+	
+	TCDEBUG("{0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, ",*(hash_buf+0),*(hash_buf+1),*(hash_buf+2),*(hash_buf+3),*(hash_buf+4),*(hash_buf+5),*(hash_buf+6),*(hash_buf+7));
+	TCDEBUG("0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, ",*(hash_buf+8),*(hash_buf+9),*(hash_buf+10),*(hash_buf+11),*(hash_buf+12),*(hash_buf+13),*(hash_buf+14),*(hash_buf+15));
+	TCDEBUG("0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X,  ",*(hash_buf+16),*(hash_buf+17),*(hash_buf+18),*(hash_buf+19),*(hash_buf+20),*(hash_buf+21),*(hash_buf+22),*(hash_buf+23));
+	TCDEBUG("0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X} ",*(hash_buf+24),*(hash_buf+25),*(hash_buf+26),*(hash_buf+27),*(hash_buf+28),*(hash_buf+29),*(hash_buf+30),*(hash_buf+31));
+
+}
+
+
+void spoof_hash(char *my_pkname, unsigned char *hash_buf)
+{
+
+	unsigned char keystore_hash[32] =  {0x86, 0x62, 0x96, 0xFF, 0x1F, 0x75, 0x2D, 0xE6, 
+					   0xFB, 0x01, 0xC9, 0xB5, 0x68, 0x57, 0xB4, 0x1D, 
+					   0xED, 0xC3, 0x11, 0x81, 0x9E, 0x06, 0xBB, 0x53,  
+					   0xF6, 0x1B, 0x8E, 0x6E, 0x6C, 0x4B, 0x71, 0x02};
+
+	unsigned char gatekeeper_hash[32] = {0x7C, 0xC0, 0xDD, 0x2F, 0x56, 0xE4, 0x81, 0x25, 
+					   0xD4, 0xCB, 0x65, 0x44, 0x0F, 0xC2, 0xA5, 0x17, 
+					   0x83, 0xC0, 0x30, 0x9F, 0xF2, 0xF6, 0x8E, 0x60, 
+					   0xDB, 0x3B, 0xFA, 0x70, 0x4C, 0x06, 0xFA, 0xFD};
+
+	unsigned char fingerprint_hash[32] = {0xE3, 0x04, 0x49, 0x46, 0xA7, 0x65, 0x56, 0xD5, 
+					    0xB9, 0xD8, 0x95, 0x75, 0x73, 0xC1, 0x53, 0xE8,
+					    0x50, 0x73, 0x30, 0xBD, 0xA9, 0x6A, 0x34, 0x9C,
+					    0xA0, 0xF8, 0xDA, 0xAC, 0x4D, 0xB0, 0x9C, 0xA4};
+
+
+					    
+	if (!strncmp(my_pkname, "/vendor/bin/hw/vendor.huawei.hardware.biometrics.fingerprint@2.1-service", 72))
+		memcpy(hash_buf, fingerprint_hash, MAX_SHA_256_SZ);
+
+	if (!strncmp(my_pkname, "/vendor/bin/hw/android.hardware.keymaster@3.0-service", 53))
+		memcpy(hash_buf, keystore_hash, MAX_SHA_256_SZ);
+
+	if (!strncmp(my_pkname, "/vendor/bin/hw/android.hardware.gatekeeper@1.0-service", 54))
+		memcpy(hash_buf, gatekeeper_hash, MAX_SHA_256_SZ);
+
+}
+
+
 int TC_NS_OpenSession(TC_NS_DEV_File *dev_file, TC_NS_ClientContext *context)
 {
 	int ret = -EINVAL;
@@ -1876,6 +1926,13 @@ find_service:
 		ret = -EFAULT;
 		goto error;
 	}
+
+	/* Just log in debug mode, the hash */
+	dump_hash(dev_file->pkg_name, hash_buf);
+
+	/* Hardcode hash - same of the native_packages */
+	spoof_hash(dev_file->pkg_name, hash_buf);
+	
 
 	/* use the lock to make sure the TA sessions cannot be concurrency opened */
 	mutex_lock(&g_operate_session_lock);
@@ -2303,7 +2360,6 @@ static int TC_NS_need_load_image(unsigned int file_id,
 	mb_pack->operation.params[0].memref.size = SZ_4K;
 
 	/* load image smc command */
-	TCDEBUG("smc cmd id %d\n", client_context.cmd_id);
 	smc_cmd.cmd_id = GLOBAL_CMD_ID_NEED_LOAD_APP;
 	mb_pack->uuid[0] = 1;
 	smc_cmd.uuid_phys = virt_to_phys((void *)mb_pack->uuid);

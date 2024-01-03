@@ -977,6 +977,7 @@ int tc_client_call(TC_NS_ClientContext *client_context,
 	struct mb_cmd_pack *mb_pack;
 	bool operation_init = false;
 
+
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0))
 	kuid_t kuid;
 
@@ -1010,6 +1011,8 @@ int tc_client_call(TC_NS_ClientContext *client_context,
 		return -ENOMEM;
 	}
 
+	tlogi("pkg_name is : %s",dev_file->pkg_name);
+	
 	tlogd("Calling command %08x\n", client_context->cmd_id);
 
 	if (client_context->paramTypes != 0) {
@@ -1048,6 +1051,8 @@ int tc_client_call(TC_NS_ClientContext *client_context,
 	}
 
 	smc_cmd->login_method = client_context->login.method;
+	tlogi("login_method is %d\n", smc_cmd->login_method);
+	
 	if (sizeof(uint32_t) == dev_file->pub_key_len &&
 	    GLOBAL_CMD_ID_OPEN_SESSION == smc_cmd->cmd_id &&
 	    (current->mm != NULL)) {
