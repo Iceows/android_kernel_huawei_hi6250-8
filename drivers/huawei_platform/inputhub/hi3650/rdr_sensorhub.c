@@ -77,7 +77,7 @@ const char* sh_reset_reasons[] =
     "SH_FAULT_REDETECT",
     "SH_FAULT_PANIC",
     "SH_FAULT_NOC",
-    "SH_FAULT_EXP_BOTTOM",
+    "SH_FAULT_EXP_BOTTOM", //also use as unknow dump
 };
 
 extern void msleep(unsigned int msecs);
@@ -259,7 +259,7 @@ void __send_nmi(void)
         writel(0x2, sysctrl_base + nmi_reg);
     }
     else
-        hwlog_err("sysctrl_base is %Kp, nmi_reg is %d!\n", sysctrl_base,
+        hwlog_err("sysctrl_base is %pK, nmi_reg is %d!\n", sysctrl_base,
                   nmi_reg);
 }
 
@@ -406,7 +406,7 @@ static int __sh_create_dir(char* path)
 
     if (path == NULL)
     {
-        hwlog_err("invalid  parameter. path:%Kp.\n", path);
+        hwlog_err("invalid  parameter. path:%pK.\n", path);
         return -1;
     }
 
@@ -470,7 +470,7 @@ int sh_savebuf2fs(char* logpath, char* filename,
 
     if (logpath == NULL || filename == NULL || buf == NULL || len <= 0)
     {
-        hwlog_err("invalid  parameter. path:%Kp, name:%Kp buf:%Kp len:0x%x\n",
+        hwlog_err("invalid  parameter. path:%pK, name:%pK buf:%pK len:0x%x\n",
                   logpath, filename, buf, len);
         ret = -1;
         goto out2;
@@ -531,7 +531,7 @@ int sh_readfs2buf(char* logpath, char* filename,
 
     if (logpath == NULL || filename == NULL || buf == NULL || len <= 0)
     {
-        hwlog_err("invalid  parameter. path:%Kp, name:%Kp buf:%Kp len:0x%x\n",
+        hwlog_err("invalid  parameter. path:%pK, name:%pK buf:%pK len:0x%x\n",
                   logpath, filename, buf, len);
         goto out2;
     }
@@ -579,7 +579,7 @@ static int sh_create_dir(const char* path)
 
     if (path == NULL)
     {
-        hwlog_err("invalid  parameter. path:%Kp\n", path);
+        hwlog_err("invalid  parameter. path:%pK\n", path);
         return -1;
     }
 
@@ -605,6 +605,18 @@ static int sh_create_dir(const char* path)
 
 extern char* rdr_get_timestamp(void);
 extern u64 rdr_get_tick(void);
+
+static int get_dump_reason_idx(void)
+{
+	if (pConfigOnDDr->dump_config.reason >= ARRAY_SIZE(sh_reset_reasons))
+	{
+		return ARRAY_SIZE(sh_reset_reasons) - 1;
+	}
+	else
+	{
+		return pConfigOnDDr->dump_config.reason;
+	}
+}
 
 static int write_sh_dump_history(void)
 {
@@ -638,7 +650,7 @@ static int write_sh_dump_history(void)
     memset(buf, 0, HISTORY_LOG_SIZE);
     snprintf(buf, HISTORY_LOG_SIZE,
              "reason [%s], [%02d], time [%s]\n",
-             sh_reset_reasons[pConfigOnDDr->dump_config.reason], g_dump_index, date);
+             sh_reset_reasons[get_dump_reason_idx()], g_dump_index, date);
 
     sh_savebuf2fs(g_dump_dir, "history.log", buf, strlen(buf), 1);
     return ret;
@@ -698,7 +710,7 @@ static int write_sh_dump_file(void)
     memset(path, 0, PATH_MAXLEN);
     snprintf(path, PATH_MAXLEN, "sensorhub-%02d.dmp", g_dump_index);
     hwlog_info("%s: write sensorhub dump  file %s\n", __func__, path);
-    hwlog_err("sensorhub recovery source is %s\n", sh_reset_reasons[pConfigOnDDr->dump_config.reason]);
+    hwlog_err("sensorhub recovery source is %s\n", sh_reset_reasons[get_dump_reason_idx()]);
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0))
     flush_cache_all();
 #endif
@@ -766,6 +778,7 @@ static int rdr_sh_thread(void* arg)
             }
 
             hwlog_warn(" ===========sensorhub dump finished==========\n");
+            hwlog_warn("dump reason idx %d\n", pConfigOnDDr->dump_config.reason);
             //write to fs
             save_sh_dump_file();
 

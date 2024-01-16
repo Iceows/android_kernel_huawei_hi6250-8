@@ -19,8 +19,13 @@
 #include "contexthub_pm.h"
 #include "contexthub_debug.h"
 #include "sensor_detect.h"
+#include "sensor_feima.h"
 
 uint32_t need_reset_io_power = 0;
+uint32_t need_set_3v_io_power = 0;
+uint32_t need_set_3_2v_io_power = 0;
+uint32_t vdd_set_io_power = 0;
+uint32_t use_ldo12_flag = 0;
 int g_sensorhub_wdt_irq = -1;
 sys_status_t iom3_sr_status = ST_WAKEUP;
 int key_state;
@@ -33,6 +38,7 @@ static struct sensor_status sensor_status_backup;
 static DEFINE_MUTEX(mutex_pstatus);
 
 extern struct regulator *sensorhub_vddio;
+struct regulator *sensorhub_ldo12_vddio;
 extern unsigned long sensor_jiffies;
 extern struct CONFIG_ON_DDR* pConfigOnDDr;
 extern int resume_skip_flag;
@@ -255,27 +261,90 @@ static int sensorhub_io_driver_probe(struct platform_device *pdev)
 		hwlog_err("[%s,%d]: sensorhub_io_driver_probe match fail !\n", __FUNCTION__, __LINE__);
 		return -ENODEV;
 	}
-        power_node = of_find_node_by_name(NULL, "sensorhub_io_power");
-        if(!power_node)
-        {
-            hwlog_err("%s failed to find dts node sensorhub_io_power\n", __func__);
-        }else if(of_property_read_u32(power_node, "need-reset", &val))
-        {
-            hwlog_err("%s failed to find property need-reset.\n", __func__);
-        }else
-        {
-            need_reset_io_power = val;
-            hwlog_info("%s property need-reset is %d.\n", __func__, val);
-        }
+	g_sensorhub_wdt_irq = platform_get_irq(pdev, 0);
+	if (g_sensorhub_wdt_irq < 0) {
+		pr_err("[%s] platform_get_irq err\n", __func__);
+		return -ENXIO;
+	}
+	power_node = of_find_node_by_name(NULL, "sensorhub_io_power");
+	if(!power_node) {
+		hwlog_err("%s failed to find dts node sensorhub_io_power\n", __func__);
+	} else {
+		if(of_property_read_u32(power_node, "need-reset", &val)) {
+			hwlog_err("%s failed to find property need-reset.\n", __func__);
+		} else {
+			need_reset_io_power = val;
+			hwlog_info("%s property need-reset is %d.\n", __func__, val);
+		}
+		val = 0;
+		if(of_property_read_u32(power_node, "set-3v", &val)) {
+			hwlog_err("%s failed to find property set-3v.\n", __func__);
+		} else {
+			need_set_3v_io_power = val;
+			hwlog_info("%s property set-3v is %d.\n", __func__, val);
+		}
+		if(of_property_read_u32(power_node, "set-3_2v", &val)) {
+			hwlog_err("%s failed to find property set-3_2v.\n", __func__);
+		} else {
+			need_set_3_2v_io_power = val;
+			hwlog_info("%s property set-3_2v is %d.\n", __func__, val);
+		}
+		if(of_property_read_u32(power_node, "vdd-set", &val)){
+			hwlog_info("%s failed to find property vdd-set.\n", __func__);
+		}else{
+			vdd_set_io_power = val;
+			hwlog_info("%s property vdd-set is %d.\n", __func__, val);
+		}
+
+		val = 0;
+		if(of_property_read_u32(power_node, "use_ldo12", &val)) {
+			hwlog_info("%s failed to find property use_ldo12.\n", __func__);
+		} else {
+			use_ldo12_flag = val;
+			hwlog_info("%s property use_ldo12 is %d.\n", __func__, val);
+		}
+	}
 	sensorhub_vddio = regulator_get(&pdev->dev, SENSOR_VBUS);
 	if (IS_ERR(sensorhub_vddio)) {
 		hwlog_err("%s: regulator_get fail!\n", __func__);
 		return -EINVAL;
 	}
 
+	if (need_set_3v_io_power) {
+		ret = regulator_set_voltage(sensorhub_vddio, SENSOR_VOLTAGE_3V, SENSOR_VOLTAGE_3V);
+		if (ret < 0)
+			hwlog_err("failed to set sensorhub_vddio voltage to 3V\n");
+	} else if (need_set_3_2v_io_power) {
+		ret = regulator_set_voltage(sensorhub_vddio, SENSOR_VOLTAGE_3_2V, SENSOR_VOLTAGE_3_2V);
+		if (ret < 0)
+			hwlog_err("failed to set sensorhub_vddio voltage to 3_2V\n");
+	} else {
+		if(vdd_set_io_power){
+			ret = regulator_set_voltage(sensorhub_vddio,vdd_set_io_power, vdd_set_io_power);
+			if(ret < 0)
+				hwlog_err("failed to set sensorhub_vddio voltage\n");
+		}
+	}
+
 	ret = regulator_enable(sensorhub_vddio);
 	if (ret < 0)
 		hwlog_err("failed to enable regulator sensorhub_vddio\n");
+
+	if(use_ldo12_flag == 1){
+		sensorhub_ldo12_vddio = regulator_get(&pdev->dev, SENSOR_VBUS_LDO12);
+		if (IS_ERR(sensorhub_ldo12_vddio)) {
+			hwlog_err("%s: ldo12 regulator_get fail!\n", __func__);
+			//return -EINVAL;
+		}else{
+			ret = regulator_set_voltage(sensorhub_ldo12_vddio, SENSOR_VOLTAGE_1V8, SENSOR_VOLTAGE_1V8);
+			if (ret < 0)
+				hwlog_err("failed to set ldo12 sensorhub_vddio voltage to 1.8V\n");
+
+			ret = regulator_enable(sensorhub_ldo12_vddio);
+			if (ret < 0)
+				hwlog_err("failed to enable ldo12 regulator sensorhub_vddio\n");
+		}
+	}
 
 	if(need_reset_io_power && (SENSOR_POWER_DO_RESET == sensorhub_reboot_reason_flag)) {
 		hwlog_info("%s : disable vddio.\n", __func__);
@@ -285,11 +354,7 @@ static int sensorhub_io_driver_probe(struct platform_device *pdev)
 
 		sensor_jiffies = jiffies;
 	}
-	g_sensorhub_wdt_irq = platform_get_irq(pdev, 0);
-	if (g_sensorhub_wdt_irq < 0) {
-		pr_err("[%s] platform_get_irq err\n", __func__);
-		return -ENXIO;
-	}
+
 	hwlog_info("%s: sensorhub_io_driver_probe success!\n", __func__);
 	return 0;
 }
@@ -302,9 +367,11 @@ static bool should_be_processed_when_sr(int sensor_tag)
 	case TAG_STEP_COUNTER:
 	case TAG_SIGNIFICANT_MOTION:
 	case TAG_PHONECALL:
-	case TAG_GPS_4774_I2C:
+	case TAG_CONNECTIVITY:
 	case TAG_FP:
+	case TAG_FP_UD:
 	case TAG_MAGN_BRACKET:
+	case TAG_DROP:
 		ret = false;
 		break;
 
@@ -322,7 +389,7 @@ void disable_sensors_when_suspend(void)
 	memset(&sensor_status_backup, 0, sizeof(sensor_status_backup));
 	memcpy(&sensor_status_backup, &sensor_status, sizeof(sensor_status_backup));
 	for (tag = TAG_SENSOR_BEGIN; tag < TAG_SENSOR_END; ++tag) {
-		if (sensor_status_backup.status[tag] && !(hifi_supported == 1 && (sensor_status.batch_cnt[tag] > 1))) {
+		if ((sensor_status_backup.status[tag] || sensor_status_backup.opened[tag]) && !(hifi_supported == 1 && (sensor_status.batch_cnt[tag] > 1))) {
 			if (should_be_processed_when_sr(tag)) {
 				inputhub_sensor_enable(tag, false);
 			}
@@ -340,13 +407,22 @@ void enable_sensors_when_resume(void)
 		.reserved[0] = TYPE_STANDARD	/*for step counter only*/
 	};
 	for (tag = TAG_SENSOR_BEGIN; tag < TAG_SENSOR_END; ++tag) {
-		if (sensor_status_backup.status[tag] && (0 == sensor_status.status[tag])
+		if ((sensor_status_backup.status[tag] || sensor_status_backup.opened[tag])
 			&& !(hifi_supported == 1 && (sensor_status.batch_cnt[tag] > 1))) {
 			if (should_be_processed_when_sr(tag)) {
-				delay_param.period = sensor_status_backup.delay[tag];
-				delay_param.batch_count = sensor_status_backup.batch_cnt[tag];
-				inputhub_sensor_enable(tag, true);
-				inputhub_sensor_setdelay(tag, &delay_param);
+				if (sensor_status_backup.opened[tag] && (0 == sensor_status.opened[tag])) {
+					inputhub_sensor_enable(tag, true);
+				}
+				if (sensor_status_backup.status[tag]) {
+					delay_param.period = sensor_status.status[tag] ? sensor_status.delay[tag] : sensor_status_backup.delay[tag];
+					delay_param.batch_count = sensor_status.status[tag] ? sensor_status.batch_cnt[tag] : sensor_status_backup.batch_cnt[tag];
+					inputhub_sensor_setdelay(tag, &delay_param);
+				} else if ((0 == sensor_status_backup.status[tag] ) && (tag == TAG_ALS) && sensor_status_backup.opened[tag]){
+					hwlog_info("ALS set delay when bachup_status =0 && bachup_opened =1 !!!\n");
+					delay_param.period = 0;
+					delay_param.batch_count = 1;
+					inputhub_sensor_setdelay(tag, &delay_param);
+				}
 			}
 		}
 	}
@@ -387,11 +463,18 @@ static void key_fb_notifier_action(int enable)
 
 static int sensorhub_fb_notifier(struct notifier_block *nb,	 unsigned long action, void *data)
 {
+	if(data == NULL){
+		return NOTIFY_OK;
+	}
 	switch (action) {
 		case FB_EVENT_BLANK:	/*change finished*/
 		{
 			struct fb_event *event = data;
 			int *blank = event->data;
+			if(registered_fb[0] != event->info){//only main screen on/off info send to hub
+				hwlog_err("%s, not main screen info, just return\n", __func__);
+				return NOTIFY_OK;
+			}
 			switch (*blank) {
 			case FB_BLANK_UNBLANK:	/*screen on */
 				tell_ap_status_to_mcu(ST_SCREENON);

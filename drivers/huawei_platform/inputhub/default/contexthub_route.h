@@ -14,6 +14,7 @@
 #include <linux/completion.h>
 #include <linux/mutex.h>
 #include <linux/workqueue.h>
+#include <huawei_platform/inputhub/sensorhub.h>
 
 #define HWLOG_TAG sensorhub
 HWLOG_REGIST();
@@ -37,8 +38,18 @@ HWLOG_REGIST();
 #define LOG_LEVEL_FATAL 0
 /* Number of z-axis samples required by FingerSense at 1.6KHz ODR */
 #define FINGERSENSE_DATA_NSAMPLES 128
-
+#define HALL_ONE_DATA_NUM 4   //number type of one ext_hall data
+#define HALL_DATA_NUM 3
+#define MAX_EXT_HALL_VALUE 3
 #define MAX_SEND_LEN (32)
+
+enum ext_hall_sensor_type {
+	EXT_HALL_TYPE_START = 0,
+	SLIDE_HALL_TYPE = 1,
+	HUB_FOLD_HALL_TYPE = 2,
+	EXT_HALL_TYPE_END,
+};
+
 struct link_package {
 	int partial_order;
 	char link_buffer[MAX_PKT_LENGTH_AP];
@@ -64,7 +75,6 @@ struct mcu_notifier {
 	struct workqueue_struct *mcu_notifier_wq;
 };
 
-
 #define OFFSET(struct_t, member)                    offsetof(struct_t, member)
 #define OFFSET_OF_END_MEM(struct_t, member)         ((unsigned long)(&(((struct_t *)0)->member) + 1))
 #define OFFSET_INTERVAL(struct_t, member1, member2) (OFFSET_OF_END_MEM(struct_t, member2) - OFFSET_OF_END_MEM(struct_t, member1))
@@ -79,6 +89,8 @@ enum port {
 	ROUTE_MOTION_PORT = 0x02,
 	ROUTE_CA_PORT = 0x03,
 	ROUTE_FHB_PORT = 0x04,
+	ROUTE_FHB_UD_PORT = 0x05,
+	ROUTE_KB_PORT = 0x06,
 };
 
 /* value lenght increase to 16 */
@@ -110,11 +122,11 @@ struct sensor_status {
 	char gyro_selfTest_result[5];
 	char mag_selfTest_result[5];
 	char accel_selfTest_result[5];
-	char gps_4774_i2c_selfTest_result[5];
+	char connectivity_selfTest_result[5];
 	char handpress_selfTest_result[5];
 	char selftest_result[TAG_SENSOR_END][5];
 	int gyro_ois_status;
-	struct t_sensor_get_data get_data[TAG_SENSOR_END];
+	struct t_sensor_get_data get_data[SENSORHUB_TYPE_END];
 };
 
 typedef struct {

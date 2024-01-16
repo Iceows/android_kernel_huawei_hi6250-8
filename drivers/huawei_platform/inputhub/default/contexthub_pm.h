@@ -5,6 +5,7 @@
 #define RESUME_MINI 1
 #define RESUME_SKIP 2
 #define SENSOR_VBUS "sensor-io"
+#define SENSOR_VBUS_LDO12 "lsensor-io"
 
 struct ipc_debug {
 	int event_cnt[TAG_END];

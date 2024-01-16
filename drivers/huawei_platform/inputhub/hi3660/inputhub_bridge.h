@@ -131,14 +131,14 @@ struct CONFIG_ON_DDR
     float gyro_offset[3];
     modem_state_t modem_state;
     u8 SAR_open_status;
+    timestamp_kernel_t timestamp_base;
+    timestamp_iomcu_base_t timestamp_base_iomcu;
     u64 reserved;
     struct charge_core_info_sh g_core_info;
     struct charge_device_info_sh g_di;
     struct sensorhub_scene scenes;
     struct uscp_device_info_sh g_di_uscp;
     struct coul_core_info_sh g_di_coul_info_sh;
-    timestamp_kernel_t timestamp_base;
-    timestamp_iomcu_base_t timestamp_base_iomcu;
 };
 
 /*receive data from mcu,you should copy the buf each time.*/

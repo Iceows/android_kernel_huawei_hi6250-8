@@ -35,7 +35,7 @@ int inputhub_ext_log_register_handler(int tag, int (*notify)(const pkt_header_t*
 	list_for_each_entry_safe(pnode, n, &inputhub_ext_log_mag.head, entry) {
 		if (tag == pnode->tag) {
 			hwlog_warn
-			("inputhub_ext_log tag = %d, notify = %pf has already registed in %s\n!",
+			("inputhub_ext_log tag = %d, notify = %pK has already registed in %s\n!",
 			 tag, notify, __func__);
 			goto out;   /*return when already registed*/
 		}

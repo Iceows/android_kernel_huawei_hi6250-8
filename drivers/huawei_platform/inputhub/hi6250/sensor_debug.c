@@ -296,7 +296,7 @@ static int aod_test(int tag, int argv[], int argc)
 	aod_req_t cpkt;
 	pkt_header_t *hd = (pkt_header_t *)&cpkt;
 	uint8_t *framebuffer;
-	u64 phy_framebuffer;
+	u64 phy_framebuffer = 0;
 	aod_display_pos_t *aod_pos;
 	struct timespec now;
 

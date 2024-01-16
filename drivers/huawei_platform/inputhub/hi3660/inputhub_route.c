@@ -620,8 +620,9 @@ int ap_hall_report(int value)
 bool ap_sensor_enable(int tag, bool enable)
 {
 	bool work_on_ap = false;
-	if (tag >= TAG_SENSOR_END)
+	if (tag < TAG_SENSOR_BEGIN ||tag >= TAG_SENSOR_END){
 		return false;
+		}
 
 	work_on_ap = all_ap_sensor_operations[tag].work_on_ap;
 
@@ -637,6 +638,9 @@ bool ap_sensor_enable(int tag, bool enable)
 bool ap_sensor_setdelay(int tag, int ms)
 {
 	bool work_on_ap = all_ap_sensor_operations[tag].work_on_ap;
+
+	if (tag < TAG_SENSOR_BEGIN ||tag>=TAG_SENSOR_END)
+                return false;
 
 	if (work_on_ap) {
 		if (all_ap_sensor_operations[tag].ops.setdelay) {
@@ -829,12 +833,19 @@ receive_next:
 	return NULL;
 }
 
-const pkt_header_t *pack(const char *buf, unsigned int length)
+const pkt_header_t *pack(const char *buf, unsigned int length, bool *is_notifier)
 {
 	const pkt_header_t *head = normalpack(buf, length);
 #ifdef CONFIG_CONTEXTHUB_SHMEM
-	if(head && (head->tag == TAG_SHAREMEM) && (head->cmd == CMD_SHMEM_AP_RECV_REQ))
-		head = shmempack(buf, length);
+	if(head && (head->tag == TAG_SHAREMEM))
+	{
+		if (head->cmd == CMD_SHMEM_AP_RECV_REQ) {
+			head = shmempack(buf, length);
+		} else if (head->cmd == CMD_SHMEM_AP_SEND_RESP) {
+			shmem_send_resp(head);
+			*is_notifier = true;
+		}
+	}
 #endif
 	return head;
 }
@@ -1981,7 +1992,7 @@ int send_sensor_batch_flush_cmd(unsigned int cmd, struct ioctl_para *para,
 			batch_param.batch_count = (para->timeout_ms > para->period_ms) ? (para->timeout_ms /para->period_ms) : 1;
 		}else{
 			batch_param.batch_count = 1;
-			hwlog_info("%s para->period_ms is zero, set count to 1\n");
+			hwlog_info("para->period_ms is zero, set count to 1\n");
 		}
 		hwlog_info("%s batch period=%d, count=%d\n", __func__, para->period_ms, batch_param.batch_count);
 		return inputhub_sensor_setdelay_internal(tag, &batch_param);
@@ -2179,8 +2190,11 @@ int write_customize_cmd(const struct write_info *wr, struct read_info *rd)
 	if (wr->wr_buf != NULL) {
 		memcpy(buf + sizeof(pkt_header_t), wr->wr_buf, wr->wr_len);
 	}
-
-	return inputhub_mcu_write_cmd_adapter(buf,
+      if ((wr->tag == TAG_SHAREMEM) && (g_iom3_state == IOM3_ST_REPEAT || g_iom3_state == IOM3_ST_RECOVERY || iom3_power_state == ST_SLEEP))
+      {
+         return inputhub_mcu_write_cmd_nolock(buf, sizeof(pkt_header_t) + wr->wr_len);
+      }
+	 return inputhub_mcu_write_cmd_adapter(buf,
 					      sizeof(pkt_header_t) + wr->wr_len,
 					      rd);
 }
@@ -2416,7 +2430,7 @@ int register_mcu_event_notifier(int tag, int cmd,
 		if ((tag == pnode->tag) && (cmd == pnode->cmd)
 		    && (notify == pnode->notify)) {
 			hwlog_warn
-			    ("tag = %d, cmd = %d, notify = %Kpf has already registed in %s\n!",
+			    ("tag = %d, cmd = %d, notify = %pK has already registed in %s\n!",
 			     tag, cmd, notify, __func__);
 			goto out;	/*return when already registed*/
 		}
@@ -2477,17 +2491,10 @@ static void step_counter_data_process(pkt_step_counter_data_req_t *head)
 		char motion_data[extend_effect_len + 1];	/*reserve 1 byte for motion type*/
 		motion_data[0] = MOTIONHUB_TYPE_HW_STEP_COUNTER;	/*add motion type*/
 		memcpy(motion_data + 1, &head->begin_time, extend_effect_len);	/*the offset rely on sizeof enum motion_type_t of mcu, now it is 1, we suggest motion_type_t use uint8_t, because sizeof(enum) may diffrernt between AP and mcu;*/
-		hwlog_info
-		    ("write extend step counter data to motion event buffer, record_count = %d!\n",
-		     (head->record_count >
-		      EXT_PEDO_VERSION_2) ? (head->record_count -
-				      EXT_PEDO_VERSION_2) : (head->record_count));
 		inputhub_route_write(ROUTE_MOTION_PORT, motion_data, extend_effect_len + 1);	/*report extend step counter date to motion HAL*/
 	}
 
-	hwlog_info
-	    ("convert to standard step counter data to sensor event buffer, step_count = %d!\n",
-	     head->step_count);
+	hwlog_info("convert to standard step counter data to sensor event buffer\n");
 	head->hd.length = standard_data_len;	/*avoid report extend data to sensor HAL, convert to standard step counter data, just report member step_count to sensor HAL*/
 }
 
@@ -2699,12 +2706,7 @@ void inputhub_process_sensor_report(const pkt_header_t* head)
         }
 
         //hwlog_info("[%lld] Kernel get event %d cnt %d!\n",timestamp, head->tag, sensor_event->cnt);
-        if (sensor_event->cnt < 0)
-        {
-            hwlog_err("Kernel get event %d cnt %d error!\n",
-                      head->tag, sensor_event->cnt);
-        }
-        else if (sensor_event->cnt < 1)
+        if (sensor_event->cnt < 1)
         {
             goto flush_event;
         }
@@ -2791,12 +2793,6 @@ void inputhub_process_sensor_report(const pkt_header_t* head)
             get_temperature_data = sensor_event->xyz[0].y;
         }
 
-        if (head->tag == TAG_CA)
-        {
-            hwlog_info("ca tag=%d:data length:%d, [data0:%d][data1:%d][data2:%d]",
-                       head->tag, head->length, sensor_event->xyz[0].x, sensor_event->xyz[0].y, sensor_event->xyz[0].y);
-        }
-
         if (head->tag == TAG_PHONECALL)  	/*recieve phonecall event*/
         {
             wake_lock_timeout(&wlock, HZ);
@@ -2846,7 +2842,7 @@ int inputhub_route_recv_mcu_data(const char *buf, unsigned int length)
     pkt_additional_info_req_t* addi_info = NULL;
 
 	const fingerprint_upload_pkt_t* fingerprint_data_upload = (const fingerprint_upload_pkt_t*)buf;
-    head = pack(buf, length);
+    head = pack(buf, length, &is_notifier);
 
     if (NULL == head)
     { return 0; }	/*receive next partial package.*/
@@ -3013,7 +3009,7 @@ int inputhub_route_recv_mcu_data(const char *buf, unsigned int length)
     {
         char* motion_data = (char*)head + sizeof(pkt_header_t);
 
-        if (((int)motion_data[0]) == MOTIONHUB_TYPE_TAKE_OFF)
+        if ((((int)motion_data[0]) == MOTIONHUB_TYPE_TAKE_OFF) || (((int)motion_data[0]) == MOTIONHUB_TYPE_PICKUP))
         {
             wake_lock_timeout(&wlock, HZ);
             hwlog_err("%s weaklock HZ motiontype = %d \n", __func__,

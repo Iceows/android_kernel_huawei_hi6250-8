@@ -58,6 +58,9 @@ static char *motion_type_str[] = {
 	[MOTION_TYPE_TAKE_OFF] = "take_off",
 	[MOTION_TYPE_EXTEND_STEP_COUNTER] = "ext_step_counter",
 	[MOTION_TYPE_EXT_LOG] = "ext_log",
+	[MOTION_TYPE_HEAD_DOWN] = "head_down",
+	[MOTION_TYPE_PUT_DOWN] = "put_down",
+	[MOTION_TYPE_SIDEGRIP] = "sidegrip",
 	[MOTION_TYPE_END] = "end",
 };
 
@@ -75,10 +78,10 @@ static int motion_ext_log_hanlder (const pkt_header_t *head)
 	for(;offset < total_len;)
 	{
 		payload_len = pkt_pedo->len + offsetof(pedo_ext_logger_req_t, data);
-		hwlog_debug("motion_ext_log_hanlder offset %d len %d, pointer %p\n", offset, payload_len, pkt_pedo);
+		hwlog_debug("motion_ext_log_hanlder offset %d len %lu, pointer %pK\n", offset, payload_len, pkt_pedo);
 		if(payload_len + offset > total_len)
 		{
-			hwlog_err("%s overstacked payload_len %d offset %d total_len %d\n", payload_len, offset, total_len);
+			hwlog_err("%s overstacked payload_len %lu offset %d total_len %d\n", __func__, payload_len, offset, total_len);
 			break;
 		}
 		inputhub_route_write(ROUTE_MOTION_PORT, (char *)pkt_pedo, payload_len);

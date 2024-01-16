@@ -42,10 +42,15 @@
 #endif
 
 int (*api_inputhub_mcu_recv) (const char* buf, unsigned int length) = 0;
-int (*send_func) (int) = NULL;
 
 extern uint32_t need_reset_io_power;
+extern uint32_t need_set_3v_io_power;
+extern uint32_t need_set_3_2v_io_power;
 extern atomic_t iom3_rec_state;
+#ifdef CONFIG_HISI_COUL
+extern int c_offset_a;
+extern int c_offset_b;
+#endif
 
 static int isSensorMcuMode;	/*mcu power mode: 0 power off;  1 power on */
 static struct notifier_block nb;
@@ -293,6 +298,20 @@ static lcd_module lcd_info[] = {
 	{DTS_COMP_SAM_FHD_5P5, VITAL_TPLCD},
 	{DTS_COMP_JDI_R63450_5P7, JDI_TPLCD},
 	{DTS_COMP_SHARP_DUKE_NT35597, SHARP_TPLCD},
+	{DTS_COMP_BOE_NT37700F, BOE_TPLCD},
+	{DTS_COMP_LG_NT37280, LG_TPLCD},
+	{DTS_COMP_BOE_NT37700F_EXT, BOE_TPLCD},
+	{DTS_COMP_LG_NT37280_EXT, LG_TPLCD},
+	{DTS_COMP_SAMSUNG_EA8074, SAMSUNG_TPLCD},
+	{DTS_COMP_SAMSUNG_EA8076, SAMSUNG_TPLCD},
+	{DTS_COMP_SAMSUNG_EA8076_V2, SAMSUNG_TPLCD},
+	{DTS_COMP_BOE_NT37700F_TAH, BOE_TPLCD},
+	{DTS_COMP_TM_TD4320_6P26, TM_TPLCD},
+	{DTS_COMP_TM_TD4330_6P26, TM_TPLCD},
+	{DTS_COMP_TM_NT36672A_6P26, TM_TPLCD},
+	{DTS_COMP_LG_TD4320_6P26, LG_TPLCD},
+	{DTS_COMP_CTC_FT8719_6P26, CTC_TPLCD},
+	{DTS_COMP_CTC_NT36672A_6P26, CTC_TPLCD},
 };
 
 static lcd_model lcd_model_info[] = {
@@ -311,7 +330,7 @@ static int8_t get_lcd_info(uint8_t index)
 	np = of_find_compatible_node(NULL, NULL, lcd_info[index].dts_comp_mipi);
 	ret = of_device_is_available(np);
 	if (np && ret) {
-		hwlog_info("%s is present\n", lcd_info[index].dts_comp_mipi);
+		//hwlog_info("%s is present\n", lcd_info[index].dts_comp_mipi);
 		return lcd_info[index].tplcd;
 	} else
 		return -1;
@@ -320,7 +339,7 @@ static int8_t get_lcd_info(uint8_t index)
 static int8_t get_lcd_model(const char *lcd_model, uint8_t index)
 {
 	if(!strncmp(lcd_model, lcd_model_info[index].dts_comp_lcd_model, strlen(lcd_model_info[index].dts_comp_lcd_model))){
-		hwlog_info("%s is present\n", lcd_model_info[index].dts_comp_lcd_model);
+		//hwlog_info("%s is present\n", lcd_model_info[index].dts_comp_lcd_model);
 		return lcd_model_info[index].tplcd;
 	} else
 		return -1;
@@ -338,7 +357,6 @@ static int get_lcd_module(void)
 		if(tplcd>0)
 			return tplcd;
 	}
-
 	np = of_find_compatible_node(NULL,NULL,"huawei,lcd_panel_type");
 	if(!np){
 		hwlog_err("not find lcd_panel_type node\n");
@@ -348,7 +366,7 @@ static int get_lcd_module(void)
 		hwlog_err("not find lcd_model in dts\n");
 		return -1;
 	}
-	hwlog_info("find lcd_panel_type suc in dts!!lcd_panel_type = %s\n",lcd_model);
+	hwlog_info("find lcd_panel_type suc in dts!!\n");
 
 	for(index=0; index<ARRAY_SIZE(lcd_model_info); index++) {
 		tplcd = get_lcd_model(lcd_model, index);
@@ -479,6 +497,18 @@ static int mcu_sys_ready_callback(const pkt_header_t *head)
 			if (time_of_vddio_power_reset < SENSOR_MAX_RESET_TIME_MS)
 				msleep(SENSOR_MAX_RESET_TIME_MS - time_of_vddio_power_reset);
 
+			if (need_set_3v_io_power) {
+				ret = regulator_set_voltage(sensorhub_vddio, SENSOR_VOLTAGE_3V, SENSOR_VOLTAGE_3V);
+				if (ret < 0)
+					hwlog_err("failed to set sensorhub_vddio voltage to 3V\n");
+			}
+
+			if (need_set_3_2v_io_power) {
+				ret = regulator_set_voltage(sensorhub_vddio, SENSOR_VOLTAGE_3_2V, SENSOR_VOLTAGE_3_2V);
+				if (ret < 0)
+					hwlog_err("failed to set sensorhub_vddio voltage to 3_2V\n");
+			}
+
 			hwlog_info("time_of_vddio_power_reset %u\n", time_of_vddio_power_reset);
 			ret = regulator_enable(sensorhub_vddio);
 			if (ret < 0)
@@ -558,6 +588,12 @@ static int write_defualt_config_info_to_sharemem(void)
     memset(pConfigOnDDr, 0, sizeof(struct CONFIG_ON_DDR));
     pConfigOnDDr->LogBuffCBBackup.mutex = 0;
     pConfigOnDDr->log_level = INFO_LEVEL;
+#ifdef CONFIG_HISI_COUL
+    pConfigOnDDr->coul_info.c_offset_a = c_offset_a;
+    pConfigOnDDr->coul_info.c_offset_b = c_offset_b;
+    of_property_read_u32(of_find_compatible_node(NULL, NULL, "hisi,coul_core"),
+                         "r_coul_mohm", &pConfigOnDDr->coul_info.r_coul_mohm);
+#endif
     return 0;
 }
 
@@ -628,6 +664,7 @@ static int inputhub_mcu_init(void)
 		hwlog_err("%s boot sensorhub fail!ret %d.\n", __func__, ret);
 	}
 	setSensorMcuMode(1);
+	mag_current_notify();
 	hwlog_info("----%s--->\n", __func__);
 	return ret;
 }

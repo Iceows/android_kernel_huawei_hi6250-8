@@ -40,6 +40,7 @@
 #define VITAL_TPLCD (11)
 #define TM_TPLCD (12)
 #define AUO_TPLCD (13)
+#define CTC_TPLCD (15)
 
 #define DTS_COMP_LG_ER69006A "hisilicon,mipi_lg_eR69006A"
 #define DTS_COMP_JDI_NT35695_CUT3_1 "hisilicon,mipi_jdi_NT35695_cut3_1"
@@ -73,6 +74,22 @@
 #define DTS_COMP_TM_FT8716_5P2 "tm_ft8716_5p2_1080p_video"
 #define DTS_COMP_EBBG_NT35596S_5P2 "ebbg_nt35596s_5p2_1080p_video"
 #define DTS_COMP_JDI_ILI7807E_5P2 "jdi_ili7807e_5p2_1080p_video"
+#define DTS_COMP_BOE_NT37700F "boe_nt37700f_vogue_6p47_1080plus_cmd"
+#define DTS_COMP_LG_NT37280 "lg_nt37280_vogue_6p47_1080plus_cmd"
+#define DTS_COMP_BOE_NT37700F_EXT "boe_nt37700f_vogue_p_6p47_1080plus_cmd"
+#define DTS_COMP_LG_NT37280_EXT "lg_nt37280_vogue_p_6p47_1080plus_cmd"
+#define DTS_COMP_LG_TD4320_6P26 "lg_td4320_6p26_1080p_video"
+#define DTS_COMP_SAMSUNG_EA8074 "samsung_ea8074_elle_6p10_1080plus_cmd"
+#define DTS_COMP_SAMSUNG_EA8076 "samsung_ea8076_elle_6p11_1080plus_cmd"
+#define DTS_COMP_SAMSUNG_EA8076_V2 "samsung_ea8076_elle_v2_6p11_1080plus_cmd"
+#define DTS_COMP_BOE_NT37700F_TAH "boe-nt37800f-tah-8p03-3lane-2mux-cmd"
+#define DTS_COMP_TM_TD4320_6P26 "tm_td4320_6p26_1080p_video"
+#define DTS_COMP_TM_TD4330_6P26 "tm_td4330_6p26_1080p_video"
+#define DTS_COMP_TM_NT36672A_6P26 "tm_nt36672a_6p26_1080p_video"
+
+#define DTS_COMP_CTC_FT8719_6P26 "ctc_ft8719_6p26_1080p_video"
+#define DTS_COMP_CTC_NT36672A_6P26 "ctc_nt36672a_6p26_1080p_video"
+
 
 enum SENSOR_POWER_CHECK {
 	SENSOR_POWER_STATE_OK = 0,
@@ -164,6 +181,32 @@ typedef struct {
 	uint8_t tplcd;
 }lcd_model;
 
+typedef struct coul_core_info {
+	int c_offset_a;
+	int c_offset_b;
+	int r_coul_mohm;
+}coul_core_info_t;
+
+typedef struct {
+	u16 mipiData;
+	u16 brightData;
+	u32 timeStamp;
+} bright_data_als_ud_t;
+
+typedef struct {
+	float rdata;
+	float gdata;
+	float bdata;
+	float irdata;
+} read_data_als_ud_t;
+
+typedef struct ALS_UD_CONFIG {
+	u8 screen_status;
+	u64 als_rgb_pa;
+	bright_data_als_ud_t BrightData_input;
+	read_data_als_ud_t read_data_history;
+} als_ud_config_t;
+
 struct CONFIG_ON_DDR
 {
 	dump_config_t dump_config;
@@ -175,6 +218,8 @@ struct CONFIG_ON_DDR
 	u64 reserved;
 	timestamp_kernel_t timestamp_base;
 	timestamp_iomcu_base_t timestamp_base_iomcu;
+	coul_core_info_t coul_info;
+	als_ud_config_t als_ud_config;
 };
 
 /*receive data from mcu,you should copy the buf each time.*/

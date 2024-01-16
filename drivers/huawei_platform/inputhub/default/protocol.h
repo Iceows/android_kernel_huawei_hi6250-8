@@ -17,9 +17,13 @@
 #define MAX_SENSOR_CALIBRATE_DATA_LENGTH  60
 #define MAX_MAG_CALIBRATE_DATA_LENGTH     12
 #define MAX_GYRO_CALIBRATE_DATA_LENGTH     72
-#define MAX_GYRO_TEMP_OFFSET_LENGTH     40
+#define MAX_GYRO_TEMP_OFFSET_LENGTH     56
 #define MAX_CAP_PROX_CALIBRATE_DATA_LENGTH     16
 #define MAX_MAG_AKM_CALIBRATE_DATA_LENGTH    28
+#define MAX_TOF_CALIBRATE_DATA_LENGTH     47
+#define MAX_PS_CALIBRATE_DATA_LENGTH        24
+#define MAX_ALS_CALIBRATE_DATA_LENGTH        24
+
 //data flag consts
 #define DATA_FLAG_FLUSH_OFFSET (0)
 #define DATA_FLAG_VALID_TIMESTAMP_OFFSET (1)
@@ -27,8 +31,13 @@
 #define DATA_FLAG_VALID_TIMESTAMP (1<<DATA_FLAG_VALID_TIMESTAMP_OFFSET)
 #define ACC_CALIBRATE_DATA_LENGTH  (15)
 #define GYRO_CALIBRATE_DATA_LENGTH  (18)
-#define PS_CALIBRATE_DATA_LENGTH  (3)
+#define PS_CALIBRATE_DATA_LENGTH  (6)
 #define ALS_CALIBRATE_DATA_LENGTH  (6)
+#define ACC1_CALIBRATE_DATA_LENGTH  (60)
+#define ACC1_OFFSET_DATA_LENGTH  (15)
+#define GYRO1_CALIBRATE_DATA_LENGTH  (18)
+#define MAX_GYRO1_CALIBRATE_DATA_LENGTH   (72)
+
 
 /*tag----------------------------------------------------*/
 typedef enum {
@@ -56,18 +65,34 @@ typedef enum {
     TAG_HANDPRESS,
     TAG_FINGERSENSE,/*0x14=20*/
     TAG_PHONECALL,
-    TAG_GPS_4774_I2C,
+    TAG_CONNECTIVITY,
     TAG_OIS,
     TAG_TILT_DETECTOR,
     TAG_RPC,/*0x19=25*///should same with modem definition
     TAG_CAP_PROX,
     TAG_MAGN_BRACKET,
     TAG_AGT,
-    TAG_SENSOR_END,//sensor end should < 45
+    TAG_COLOR,
+    TAG_ACCEL_UNCALIBRATED,/*0x1e = 30*/
+    TAG_TOF,
+    TAG_DROP,
+	TAG_POSTURE,
+    TAG_EXT_HALL,
+    TAG_ACC1 = 35,/*0x23 = 35*/
+    TAG_GYRO1,
+    TAG_ACC2,
+    TAG_GYRO2,
+    TAG_MAG1,
+    TAG_ALS1,/*0x28 = 40*/
+    TAG_PS1,
+    TAG_PRESSURE1,
+    TAG_CAP_PROX1,
+    TAG_AUX_END,
+    TAG_SENSOR_END = TAG_AUX_END,//sensor end should < 45
     TAG_HW_PRIVATE_APP_START = 45,/*0x2d=45*/
     TAG_AR = TAG_HW_PRIVATE_APP_START,
     TAG_MOTION,
-    TAG_GPS,
+    TAG_CONNECTIVITY_AGENT,
     TAG_PDR,
     TAG_CA,
     TAG_FP,/*0x32=50*/
@@ -76,26 +101,35 @@ typedef enum {
     TAG_FLP,
     TAG_ENVIRONMENT,
     TAG_LOADMONITOR,/*0x37=55*/
+    TAG_APP_CHRE,
+    TAG_FP_UD,
     TAG_HW_PRIVATE_APP_END,//APP_END should < 64, because power log used bitmap
     TAG_MODEM = 128,/*0x80=128*/
     TAG_TP,
     TAG_SPI,
     TAG_I2C,
-    TAG_I3C,
     TAG_UART,
     TAG_RGBLIGHT,
-    TAG_BUTTONLIGHT,/*0x87=135*/
-    TAG_BACKLIGHT,
+    TAG_BUTTONLIGHT,
+    TAG_BACKLIGHT,/*0x86=135*/
     TAG_VIBRATOR,
     TAG_SYS,
     TAG_LOG,
-    TAG_LOG_BUFF,/*0x8c=140*/
-    TAG_RAMDUMP,
+    TAG_LOG_BUFF,
+    TAG_RAMDUMP,/*0x8b=140*/
     TAG_FAULT,
     TAG_SHAREMEM,
     TAG_SHELL_DBG,
-    TAG_PD,/*0x91=145*/
+    TAG_PD,
+    TAG_I3C,/*0x90=145*/
     TAG_DATA_PLAYBACK,
+    TAG_CHRE,
+    TAG_SENSOR_CALI,
+    TAG_CELL,
+    TAG_BIG_DATA,
+    TAG_SWING,
+    TAG_SWING_DBG,
+    TAG_KB,
     TAG_END = 0xFF
 }obj_tag_t;
 
@@ -115,23 +149,23 @@ typedef enum {
 	CMD_DATA_REQ = 0x1f,
 	CMD_DATA_RESP,
 
-	CMD_SET_FAULT_TYPE_REQ,
+	CMD_SET_FAULT_TYPE_REQ,//0x21
 	CMD_SET_FAULT_TYPE_RESP,
 	CMD_SET_FAULT_ADDR_REQ,
 	CMD_SET_FAULT_ADDR_RESP,
 
 	/*SPI*/
-	CMD_SPI_BAUD_REQ,
+	CMD_SPI_BAUD_REQ,//0x25
 	CMD_SPI_BAUD_RESP,
 	CMD_SPI_TRANS_REQ,
 	CMD_SPI_TRANS_RESP,
 
 	/*I2C*/
-	CMD_I2C_TRANS_REQ,
+	CMD_I2C_TRANS_REQ,//0x29
 	CMD_I2C_TRANS_RESP,
 
 	/*system status*/
-	CMD_SYS_STATUSCHANGE_REQ,
+	CMD_SYS_STATUSCHANGE_REQ,//0x2b
 	CMD_SYS_STATUSCHANGE_RESP,
 	CMD_SYS_DYNLOAD_REQ,
 	CMD_SYS_DYNLOAD_RESP,
@@ -143,7 +177,7 @@ typedef enum {
 	CMD_SYS_CTS_RESTRICT_MODE_RESP,
 
 	/*LOG*/
-	CMD_LOG_REPORT_REQ,
+	CMD_LOG_REPORT_REQ,//0x35
 	CMD_LOG_REPORT_RESP,
 	CMD_LOG_CONFIG_REQ,
 	CMD_LOG_CONFIG_RESP,
@@ -151,28 +185,58 @@ typedef enum {
 	CMD_LOG_POWER_RESP,
 
 	/*SHAREMEM*/
-	CMD_SHMEM_AP_RECV_REQ,
+	CMD_SHMEM_AP_RECV_REQ,//0x3b
 	CMD_SHMEM_AP_RECV_RESP,
 	CMD_SHMEM_AP_SEND_REQ,
 	CMD_SHMEM_AP_SEND_RESP,
 
 	/* tag modem for cell info*/
-	CMD_MODEM_CELL_INFO_REQ,
+	CMD_MODEM_CELL_INFO_REQ,//0x3f
 	CMD_MODEM_CELL_INFO_RESP,
+	CMD_MODEM_REBOOT_NOTIFY_REQ,
+	CMD_MODEM_REBOOT_NOTIFY_RESP,
 
 	/* SHELL_DBG */
-	CMD_SHELL_DBG_REQ,
+	CMD_SHELL_DBG_REQ,//0x43
 	CMD_SHELL_DBG_RESP,
 
 	/* LoadMonitor */
-	CMD_READ_AO_MONITOR_SENSOR,
+	CMD_READ_AO_MONITOR_SENSOR,//0x45
 	CMD_READ_AO_MONITOR_SENSOR_RESP,
 
 	/* TAG_DATA_PLAYBACK */
-	CMD_DATA_PLAYBACK_DATA_READY_REQ,         /*BACKPLAY*/
+	CMD_DATA_PLAYBACK_DATA_READY_REQ, //0x47        /*BACKPLAY*/
 	CMD_DATA_PLAYBACK_DATA_READY_RESP,
 	CMD_DATA_PLAYBACK_BUF_READY_REQ,        /*RECORD*/
 	CMD_DATA_PLAYBACK_BUF_READY_RESP,
+
+	/* CHRE */
+	CMD_CHRE_AP_SEND_TO_MCU,//0x4b
+	CMD_CHRE_AP_SEND_TO_MCU_RESP,
+	CMD_CHRE_MCU_SEND_TO_AP,
+	CMD_CHRE_MCU_SEND_TO_AP_RESP,
+
+	/* BIG DATA */
+	CMD_BIG_DATA_REQUEST_DATA,//0x4f
+	CMD_BIG_DATA_REQUEST_DATA_RESP,
+	CMD_BIG_DATA_SEND_TO_AP,   //0x51
+	CMD_BIG_DATA_SEND_TO_AP_RESP,  //0x52
+
+	/* tag sys for hall status*/
+	CMD_SYS_HALL_STATUS_REQ = 0x53,//0x53
+	CMD_SYS_HALL_STATUS_RESP = 0x54,//0x54
+
+	/* tag modem for phonecall status*/
+	CMD_MODEM_PHONECALL_INFO_REQ = 0x55,//0x55
+	CMD_MODEM_PHONECALL_INFO_RESP = 0x56,//0x56
+
+	/*I3C*/
+	CMD_I3C_TRANS_REQ = 0x57,
+	CMD_I3C_TRANS_RESP,
+
+	/* tag als for ud*/
+	CMD_ALS_RUN_STOP_PARA_REQ = 0x59,
+	CMD_ALS_RUN_STOP_PARA_REsp = 0x5a,
 
 	/*log buff*/
 	CMD_LOG_SER_REQ = 0xf1,
@@ -200,6 +264,16 @@ typedef enum{
 	SUB_CMD_FW_DLOAD_REQ,
 	SUB_CMD_FLUSH_REQ,
 	SUB_CMD_SET_ADD_DATA_REQ,//11
+	SUB_CMD_SET_DATA_TYPE_REQ,//12
+	SUB_CMD_SET_DATA_MODE = 0x0d,//13
+	SUB_CMD_SET_TP_COORDINATE,//14
+	SUB_CMD_SET_WRITE_NV_ATTER_SALE = SUB_CMD_SET_TP_COORDINATE,
+
+	/*als*/
+	SUB_CMD_SET_ALS_PA = 0x20,
+	SUB_CMD_UPDATE_BL_LEVEL,
+	SUB_CMD_UPDATE_RGB_DATA,
+	SUB_CMD_GET_FACTORY_PARA,
 
 	/*motion*/
 	SUB_CMD_MOTION_ATTR_ENABLE_REQ = 0x20,
@@ -242,6 +316,7 @@ typedef enum{
 	SUB_CMD_FLP_AR_UPDATE_REQ,
 	SUB_CMD_FLP_AR_FLUSH_REQ,
 	SUB_CMD_FLP_AR_GET_STATE_REQ,
+	SUB_CMD_FLP_AR_SHMEM_STATE_REQ,
 	SUB_CMD_CELL_INFO_DATA_REQ = 0x29,
 
 	/*tag environment*/
@@ -262,12 +337,46 @@ typedef enum{
 	SUB_CMD_FLP_RESET_REQ,
 	SUB_CMD_FLP_RESET_RESP,
 	SUB_CMD_FLP_GET_BATCH_SIZE_REQ,
+	SUB_CMD_FLP_BATCH_PUSH_GNSS_REQ,
+
 	SUB_CMD_FLP_ADD_GEOF_REQ,
 	SUB_CMD_FLP_REMOVE_GEOF_REQ,
 	SUB_CMD_FLP_MODIFY_GEOF_REQ,
 	SUB_CMD_FLP_LOCATION_UPDATE_REQ,
 	SUB_CMD_FLP_GEOF_TRANSITION_REQ,
 	SUB_CMD_FLP_GEOF_MONITOR_STATUS_REQ,
+
+	SUB_CMD_FLP_GEOF_GET_TRANSITION_REQ,
+
+	SUB_CMD_FLP_CELLFENCE_ADD_REQ,
+	SUB_CMD_FLP_CELLFENCE_OPT_REQ,
+	SUB_CMD_FLP_CELLFENCE_TRANSITION_REQ,
+	SUB_CMD_FLP_CELLFENCE_INJECT_RESULT_REQ,
+
+	SUB_CMD_FLP_CELLTRAJECTORY_CFG_REQ,
+	SUB_CMD_FLP_CELLTRAJECTORY_REQUEST_REQ,
+	SUB_CMD_FLP_CELLTRAJECTORY_REPORT_REQ,
+	SUB_CMD_FLP_CELLDB_LOCATION_REPORT_REQ,
+
+	SUB_CMD_FLP_COMMON_STOP_SERVICE_REQ,
+	SUB_CMD_FLP_COMMON_WIFI_CFG_REQ,
+
+	SUB_CMD_FLP_GEOF_GET_LOCATION_REQ,
+	SUB_CMD_FLP_GEOF_GET_LOCATION_REPORT_REQ,
+	SUB_CMD_FLP_ADD_WIFENCE_REQ,
+	SUB_CMD_FLP_REMOVE_WIFENCE_REQ,
+	SUB_CMD_FLP_PAUSE_WIFENCE_REQ,
+	SUB_CMD_FLP_RESUME_WIFENCE_REQ,
+	SUB_CMD_FLP_GET_WIFENCE_STATUS_REQ,
+	SUB_CMD_FLP_WIFENCE_TRANSITION_REQ,
+	SUB_CMD_FLP_WIFENCE_STATUS_REQ,
+	SUB_CMD_FLP_COMMON_DEBUG_CONFIG_REQ,
+
+	SUB_CMD_FLP_CELL_CELLBATCHING_CFG_REQ,
+	SUB_CMD_FLP_CELL_CELLBATCHING_REQ,
+	SUB_CMD_FLP_CELL_CELLBATCHING_REPORT_REQ,
+	SUB_CMD_FLP_DIAG_SEND_CMD_REQ,
+	SUB_CMD_FLP_DIAG_DATA_REPORT_REQ,
 
 	//Always On Display
 	SUB_CMD_AOD_START_REQ = 0x20,
@@ -277,6 +386,8 @@ typedef enum{
 	SUB_CMD_AOD_SET_TIME_REQ,
 	SUB_CMD_AOD_SET_DISPLAY_SPACE_REQ,
 	SUB_CMD_AOD_SETUP_REQ,
+	SUB_CMD_AOD_DSS_ON_REQ,
+	SUB_CMD_AOD_DSS_OFF_REQ,
 
 	//key
 	SUB_CMD_BACKLIGHT_REQ = 0x20,
@@ -285,6 +396,52 @@ typedef enum{
 	SUB_CMD_RPC_STOP_REQ,
 	SUB_CMD_RPC_UPDATE_REQ,
 	SUB_CMD_RPC_LIBHAND_REQ,
+
+	SUB_CMD_VIBRATOR_SINGLE_REQ = 0x20,
+	SUB_CMD_VIBRATOR_REPEAT_REQ,
+	SUB_CMD_VIBRATOR_ON_REQ,
+	SUB_CMD_VIBRATOR_SET_AMPLITUDE_REQ,
+
+	//swing
+	SUB_CMD_SWING_LOAD_MODEL = 0x20,
+	SUB_CMD_SWING_UNLOAD_MODEL,
+	SUB_CMD_SWING_RUN_MODEL,
+	SUB_CMD_SWING_GET_INFO,
+	SUB_CMD_SWING_LIST_MODELS,
+	SUB_CMD_SWING_DBG_ISR,
+	SUB_CMD_SWING_FUSION_EN,
+	SUB_CMD_SWING_ATOM_EN,
+	SUB_CMD_SWING_FUSION_SET,
+	SUB_CMD_SWING_ATOM_SET,
+	SUB_CMD_SWING_FUSION_UPLOAD,
+
+	//swing debug
+	SUB_CMD_SWING_DBG_SET_BKPT = 0x20,
+	SUB_CMD_SWING_DBG_RM_BKPT,
+	SUB_CMD_SWING_DBG_SINGLE_STEP,
+	SUB_CMD_SWING_DBG_SUSPEND,
+	SUB_CMD_SWING_DBG_RESUME,
+	SUB_CMD_SWING_DBG_READ,
+	SUB_CMD_SWING_DBG_WRITE,
+	SUB_CMD_SWING_DBG_SHOW_BKPTS,
+	SUB_CMD_SWING_DBG_DUMP,
+	SUB_CMD_SWING_DBG_MODEL,
+	SUB_CMD_SWING_DBG_LIST_TASKS,
+	SUB_CMD_SWING_DBG_RUN_BLAS,
+	SUB_CMD_SWING_DBG_PROFILE_CONFIG,
+	SUB_CMD_SWING_DBG_PROFILE_START,
+	SUB_CMD_SWING_DBG_PROFILE_STOP,
+	/* KB */
+	SUB_CMD_KB_OPEN_REQ = 0x20,
+	SUB_CMD_KB_OPEN_RESP,
+	SUB_CMD_KB_CLOSE_REQ,
+	SUB_CMD_KB_CLOSE_RESP,
+	SUB_CMD_KB_REPORT_REQ,
+	SUB_CMD_KB_REPORT_RESP,
+	SUB_CMD_KB_EVENT_REQ ,
+	SUB_CMD_KB_EVENT_RESP,
+	SUB_CMD_KB_PARAMET_REQ ,
+	SUB_CMD_KB_PARAMET_RESP ,
 
 	SUB_CMD_MAX = 0xff,
 }obj_sub_cmd_t;
@@ -312,10 +469,16 @@ typedef enum {
 	MOTION_TYPE_ACTIVITY,
 	MOTION_TYPE_TAKE_OFF,
 	MOTION_TYPE_EXTEND_STEP_COUNTER,
-	MOTION_TYPE_EXT_LOG,
-/*!!!NOTE:add string in motion_type_str when add type*/
+	MOTION_TYPE_EXT_LOG, //type 0xc
+	MOTION_TYPE_HEAD_DOWN,
+	MOTION_TYPE_PUT_DOWN,
+	//
+	MOTION_TYPE_SIDEGRIP, //sensorhub internal use, must at bottom;
+	MOTION_TYPE_MOVE, //sensorhub internal use, must at bottom;
+	/*!!!NOTE:add string in motion_type_str when add type*/
 	MOTION_TYPE_END,
 } motion_type_t;
+
 typedef enum
 {
 	FINGERPRINT_TYPE_START = 0x0,
@@ -363,6 +526,21 @@ typedef enum {
 	ST_RECOVERY_FINISH,//for ar notify modem when iom3 recovery
 	ST_END
 } sys_status_t;
+
+typedef enum {
+	DUBAI_EVENT_NULL = 0,
+	DUBAI_EVENT_AOD_PICKUP = 3,
+	DUBAI_EVENT_AOD_PICKUP_NO_FINGERDOWN =4,
+	DUBAI_EVENT_AOD_TIME_STATISTICS = 6,
+	DUBAI_EVENT_END
+} dubai_event_type_t;
+
+typedef enum {
+	BIG_DATA_EVENT_MOTION_TYPE = 936005001,
+	BIG_DATA_EVENT_DDR_INFO,
+	BIG_DATA_EVENT_TOF_PHONECALL,
+	BIG_DATA_EVENT_PHONECALL_SCREEN_STATUS
+} big_data_event_id_t;
 
 typedef enum {
 	TYPE_STANDARD,
@@ -535,14 +713,25 @@ typedef struct
 
 typedef struct
 {
-	pkt_header_t hd;
-	uint16_t data_flag;
-	uint16_t cnt;
-	uint16_t len_element;
-	uint16_t sample_rate;
-	uint64_t timestamp;
-	int32_t status;
+    pkt_common_data_t data_hd;
+    int32_t status;
 } pkt_magn_bracket_data_req_t;
+
+typedef struct
+{
+    unsigned int type;
+    unsigned int initial_speed;
+    unsigned int height;
+    int angle_pitch;
+    int angle_roll;
+    unsigned int material;
+} drop_info_t;
+
+typedef struct
+{
+    pkt_common_data_t data_hd;
+    drop_info_t   data;
+} pkt_drop_data_req_t;
 
 typedef struct interval_param{
 	uint32_t  period;
@@ -627,10 +816,17 @@ typedef struct {
 
 typedef struct {
 	pkt_header_t hd;
-	/*(MAX_PKT_LENGTH-sizeof(PKT_HEADER)-sizeof(End))/sizeof(uint16_t)*/
-	uint8_t end;
-	uint8_t file_count;
-	uint16_t file_list[];
+	uint32_t event_id;
+} pkt_big_data_report_t;
+
+typedef struct {
+	pkt_header_t hd;
+	//1表示副sensorlist，0则是filelist，2表示开始加载
+	uint8_t file_flg;
+	//每次总数量不能大于
+	//(MAX_PKT_LENGTH-sizeof(PKT_HEADER)-sizeof(End))/sizeof(UINT16)
+	uint8_t file_count;//file或者副sensor的数量
+	uint16_t file_list[];//fileid或副sensor的tag
 } pkt_sys_dynload_req_t;
 
 typedef struct {
@@ -652,6 +848,12 @@ typedef struct {
 typedef struct {
 	pkt_header_t hd;
 	uint32_t subcmd;
+	char calibrate_data[MAX_MAG_CALIBRATE_DATA_LENGTH];
+} pkt_mag1_calibrate_data_req_t;
+
+typedef struct {
+	pkt_header_t hd;
+	uint32_t subcmd;
 	char calibrate_data[MAX_MAG_AKM_CALIBRATE_DATA_LENGTH];
 } pkt_akm_mag_calibrate_data_req_t;
 
@@ -664,8 +866,32 @@ typedef struct {
 typedef struct {
 	pkt_header_t hd;
 	uint32_t subcmd;
+	char calibrate_data[MAX_GYRO1_CALIBRATE_DATA_LENGTH];
+} pkt_gyro1_calibrate_data_req_t;
+
+typedef struct {
+	pkt_header_t hd;
+	uint32_t subcmd;
 	char calibrate_data[MAX_GYRO_TEMP_OFFSET_LENGTH];
 } pkt_gyro_temp_offset_req_t;
+
+typedef struct {
+	pkt_header_t hd;
+	uint32_t subcmd;
+	char calibrate_data[MAX_TOF_CALIBRATE_DATA_LENGTH];
+} pkt_tof_calibrate_data_req_t;
+
+typedef struct {
+	pkt_header_t hd;
+	uint32_t subcmd;
+	char calibrate_data[MAX_PS_CALIBRATE_DATA_LENGTH];
+} pkt_ps_calibrate_data_req_t;
+
+typedef struct {
+	pkt_header_t hd;
+	uint32_t subcmd;
+	char calibrate_data[MAX_ALS_CALIBRATE_DATA_LENGTH];
+} pkt_als_calibrate_data_req_t;
 
 typedef struct {
 	pkt_common_data_t fhd;
@@ -677,6 +903,26 @@ typedef struct {
 	uint8_t buf[7]; //byte alignment
 	uint8_t len;
 } fingerprint_req_t;
+
+typedef struct {
+	pkt_header_t hd;
+	uint64_t app_id;
+	uint16_t msg_type;
+	uint8_t res[2];
+	uint8_t data[];
+} chre_req_t;
+typedef struct {
+	pkt_header_t hd;
+	uint8_t core;
+	uint8_t cmd;
+	uint8_t data[];
+} swing_req_t;
+
+typedef struct{
+	uint32_t sample_start_time;
+	uint32_t sample_interval;
+	uint32_t integ_time;
+}als_run_stop_para_t;
 
 typedef enum additional_info_type {
     //
@@ -773,7 +1019,10 @@ enum {
     	FILE_MAGN_BRACKET,  			//21
     	FILE_FLP,                               // 22
     	FILE_TILT_DETECTOR,     //23
-        FILE_RPC,
+    	FILE_RPC,
+	FILE_FINGERPRINT_UD = 28,
+	FILE_DROP,           //29
+	FILE_CONNECTIVITY_AGENT,                /* 30 */
 	FILE_APP_ID_MAX = 31,                   /* MAX VALID FILE ID FOR APPs */
 
 	FILE_AKM09911_DOE_MAG,                  /* 32 */
@@ -791,7 +1040,7 @@ enum {
 	FILE_APDS993X_ALS,                      /* 44 */
 	FILE_APDS993X_PS,                       /* 45 */
 	FILE_TMD2620_PS,                        /* 46 */
-	FILE_GPS_4774,                          /* 47 */
+	FILE_CONNECTIVITY,                      /* 47 */
 	FILE_ST_LPS22BH,                        /* 48 */
 	FILE_APDS9110_PS,                       /* 49 */
 	FILE_CYPRESS_HANDPRESS,                 //50
@@ -826,7 +1075,61 @@ enum {
 	FILE_BOSCH_BMP380,			/* 82 */
 	FILE_TMD3725_ALS,                       // 83
 	FILE_TMD3725_PS,                        // 84
-	FILE_ID_MAX = 89,                       /* MAX VALID FILE ID */
+	FILE_DRV2605_DRV,                       //85
+	FILE_LTR582_ALS, //86
+	FILE_LTR582_PS,  //87
+	FILE_GOODIX_BAIKAL_FP, //88
+	FILE_GOODIX5288_FP,
+	FILE_QFP1500_FP, //90
+	FILE_FPC1291_FP,  //91
+	FILE_FPC1028_FP,  //92
+	FILE_GOODIX3258_FP,  //93
+	FILE_SILEAD6152_FP,  //94
+	FILE_APDS9999_ALS,//95
+	FILE_APDS9999_PS,//96
+	FILE_TMD3702_ALS,//97
+	FILE_TMD3702_PS,//98
+	FILE_AMS8701_TOF,    //99
+	FILE_VCNL36658_ALS,    //100
+	FILE_VCNL36658_PS,    //101
+	FILE_SILEAD6165_FP, //102
+	FILE_SYNA155A_FP, //103
+	FILE_SYNA_STELLER_FP, //104
+	FILE_TSL2591_ALS, //105
+	FILE_BH1726_ALS, //106
+	FILE_TP_UD,  //107
+	FILE_SYNA_TP,  //108
+	FILE_GP2AP02_TOF,//109
+	FILE_SYNA_TCM_TP,//110
+	FILE_APDS9253_006_PS,//111
+	FILE_APDS9253_006_ALS,//112
+	FILE_GOODIX_TP_UD,//113
+	FILE_GOODIX3658_FP,//114
+	FILE_FPC1511_FP,//115
+	FILE_PA224_PS_VER2,//116
+	FILE_TCS3701_ALS,//117
+	FILE_TCS3701_PS,//118
+	FILE_GOODIX_UD_G2_FP,//119
+	FILE_SOLOMON_TP_UD,//120
+	FILE_BMI260_ACC,  // 121
+	FILE_BMI260_GYRO, // 122
+	FILE_GOODIX3206_FP, //123
+	FILE_SX9335_CAP_PROX,//124
+	FILE_MMC5603_MAG,//125
+	FILE_POSTURE,//126
+	FILE_LTR2568_ALS,//127
+	FILE_BH1749_ALS,//128
+	FILE_STK3338_PS,//129
+	FILE_STK3338_ALS, //130
+	FILE_VCNL36832_PS,//131
+	FILE_VCNL36832_ALS,//132
+	FILE_KB, // 133
+	FILE_LTR2568_PS,//134
+	FILE_GOODIX3216_FP, // 135
+	FILE_ET525_FP, // 136
+	FILE_A96T3X6_CAP_PROX,
+	FILE_TCS3701_EXT_ALS, // 138
+	FILE_ID_MAX = 139, // MAX VALID FILE ID
 };
 
 #endif

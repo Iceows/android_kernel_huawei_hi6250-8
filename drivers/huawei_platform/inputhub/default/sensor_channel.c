@@ -31,12 +31,39 @@ int txc_ps_flag;
 int ams_tmd2620_ps_flag;
 int avago_apds9110_ps_flag;
 int als_first_start_flag;
+int als_under_tp_first_start_flag;
 int gyro_first_start_flag;
 int handpress_first_start_flag;
 int rohm_rgb_flag;
 int avago_rgb_flag;
+int is_cali_supported;
 int  ams_tmd3725_rgb_flag;
 int  ams_tmd3725_ps_flag;
+int  liteon_ltr582_rgb_flag;
+int  liteon_ltr582_ps_flag;
+int ltr578_flag;
+int apds9922_flag;
+int rpr531_flag;
+int tmd2745_flag;
+int apds9999_rgb_flag;
+int apds9999_ps_flag;
+int  ams_tmd3702_rgb_flag;
+int  ams_tmd3702_ps_flag;
+int apds9253_rgb_flag;
+int vishay_vcnl36658_als_flag;
+int vishay_vcnl36658_ps_flag;
+int vishay_vcnl36832_als_flag;
+int stk3338_als_flag;
+int ltr2568_als_flag;
+int ams_tof_flag;
+int sharp_tof_flag;
+int tsl2591_flag;
+int bh1726_flag;
+int apds9253_006_ps_flag;
+int ams_tcs3701_ps_flag;
+int ams_tcs3701_rgb_flag;
+int acc1_first_start_flag;
+int gyro1_first_start_flag;
 
 extern char sensor_chip_info[SENSOR_MAX][MAX_CHIP_INFO_LEN];
 extern t_ap_sensor_ops_record all_ap_sensor_operations[TAG_SENSOR_END];
@@ -82,6 +109,21 @@ static const struct sensors_cmd_map sensors_cmd_map_tab[] = {
 	{SENSORHUB_TYPE_META_DATA, TAG_FLUSH_META},
 	{SENSORHUB_TYPE_RPC, TAG_RPC},
 	{SENSORHUB_TYPE_AGT, TAG_AGT},
+	{SENSORHUB_TYPE_COLOR,TAG_COLOR},
+	{SENSORHUB_TYPE_ACCELEROMETER_UNCALIBRATED, TAG_ACCEL_UNCALIBRATED},
+	{SENSORHUB_TYPE_TOF, TAG_TOF},
+	{SENSORHUB_TYPE_DROP, TAG_DROP},
+	{SENSORHUB_TYPE_POSTURE, TAG_POSTURE},
+	{SENSORHUB_TYPE_EXT_HALL, TAG_EXT_HALL},
+	{SENSORHUB_TYPE_ACCELEROMETER1, TAG_ACC1},
+	{SENSORHUB_TYPE_GYROSCOPE1, TAG_GYRO1},
+	{SENSORHUB_TYPE_ACCELEROMETER2, TAG_ACC2},
+	{SENSORHUB_TYPE_GYROSCOPE2, TAG_GYRO2},
+	{SENSORHUB_TYPE_LIGHT1, TAG_ALS1},
+	{SENSORHUB_TYPE_PROXIMITY1, TAG_PS1},
+	{SENSORHUB_TYPE_MAGNETIC1, TAG_MAG1},
+	{SENSORHUB_TYPE_PRESSURE1, TAG_PRESSURE1},
+	{SENSORHUB_TYPE_CAP_PROX1, TAG_CAP_PROX1},
 };
 
 static void init_hash_tables(void)
@@ -130,15 +172,23 @@ static bool ap_sensor_flush(int tag)
 static int send_sensor_batch_flush_cmd(unsigned int cmd, struct ioctl_para *para, int tag)
 {
 	write_info_t winfo;
-	uint32_t subcmd;
+	uint32_t subcmd = 0;
+
+	memset(&winfo, 0, sizeof(winfo));
 
 	if (SHB_IOCTL_APP_SENSOR_BATCH == cmd) {
-		interval_param_t batch_param = {
-			.period = para->period_ms,
-			.batch_count = (para->timeout_ms > para->period_ms) ? (para->timeout_ms /para->period_ms) : 1,
-			.mode = AUTO_MODE,
-		};
-		hwlog_info("batch in %s period=%d, count=%d\n", __func__, para->period_ms, batch_param.batch_count);
+		interval_param_t batch_param;
+		batch_param.mode = AUTO_MODE;
+		batch_param.period = para->period_ms;
+
+		if(0 != para->period_ms){
+			batch_param.batch_count = (para->timeout_ms > para->period_ms) ? (para->timeout_ms /para->period_ms) : 1;
+		}else{
+			batch_param.batch_count = 1;
+			hwlog_info("para->period_ms is zero, set count to 1\n");
+		}
+
+		hwlog_info("%s batch period=%d, count=%d\n", __func__, para->period_ms, batch_param.batch_count);
 		return inputhub_sensor_setdelay(tag, &batch_param);
 	} else if (SHB_IOCTL_APP_SENSOR_FLUSH == cmd) {
 		hwlog_info("flush in %s \n", __func__);
@@ -274,6 +324,44 @@ static void get_acc_calibrate_data(void)
     }
 }
 
+static void get_acc1_calibrate_data(void)
+{
+    int ret = 0;
+    if (0 == acc1_first_start_flag)
+    {
+        ret=send_gsensor1_calibrate_data_to_mcu();
+        if(ret) hwlog_err( "get_acc1_calibrate_data read from nv fail, ret=%d", ret);
+        else
+        {
+            hwlog_info("read nv success\n");
+        }
+    }
+}
+
+
+extern int send_vibrator_calibrate_data_to_mcu(void);
+static void get_vibrator_calibrate_data(void)
+{
+    int ret = 0;
+    static int vib_first_flag = 0;
+    if(0 == strlen(sensor_chip_info[VIBRATOR])){
+        return;
+    }
+
+    if (0 == vib_first_flag)
+    {
+        ret = send_vibrator_calibrate_data_to_mcu();
+        if(ret) {
+		hwlog_err( "%s read from nv fail, ret=%d", __func__, ret);
+	}
+        else
+        {
+		hwlog_info("%s read nv success\n", __func__);
+        }
+	vib_first_flag = 1;
+    }
+}
+
 extern int send_mag_calibrate_data_to_mcu(void);
 static void get_mag_calibrate_data(void)
 {
@@ -289,6 +377,23 @@ static void get_mag_calibrate_data(void)
             hwlog_info("%s read mag data from nv and send to iom3 success\n", __func__);
         }
         mag_first_start_flag = 1;
+    }
+}
+extern int send_mag1_calibrate_data_to_mcu(void);
+static void get_mag1_calibrate_data(void)
+{
+    int ret = 0;
+    static int mag1_first_start_flag = 0;
+    if (0 == mag1_first_start_flag)
+    {
+        //mag_current_notify();
+        ret = send_mag1_calibrate_data_to_mcu();
+        if (ret) {
+            hwlog_err("%s read mag data from nv or send to iom3 failed, ret=%d\n", __func__, ret);
+        } else {
+            hwlog_info("%s read mag data from nv and send to iom3 success\n", __func__);
+        }
+        mag1_first_start_flag = 1;
     }
 }
 
@@ -307,6 +412,24 @@ static void get_cap_prox_calibrate_data(void)
         }
         cap_prox_first_start_flag = 1;
     }
+}
+
+extern int send_cap_prox1_calibrate_data_to_mcu(void);
+static void get_cap_prox1_calibrate_data(void)
+{
+	int ret = 0;
+	static int cap_prox1_first_start_flag;
+
+	if (cap_prox1_first_start_flag == 0) {
+		ret = send_cap_prox1_calibrate_data_to_mcu();
+		if (ret)
+			hwlog_err("%s read cap_prox1 data from nv or send to\
+			iom3 failed, ret=%d\n", __func__, ret);
+		else
+			hwlog_info("%s read cap_prox1 data from nv and send\
+			to iom3 success\n", __func__);
+		cap_prox1_first_start_flag = 1;
+	}
 }
 
 static void get_airpress_calibrate_data(void)
@@ -329,10 +452,14 @@ static void get_airpress_calibrate_data(void)
 }
 
 extern int send_ps_calibrate_data_to_mcu(void);
+extern int send_tof_calibrate_data_to_mcu(void);
 static void get_psensor_calibrate_data(void)
 {
     int ret = 0;
-    if (0 == ps_first_start_flag &&  (txc_ps_flag == 1 || ams_tmd2620_ps_flag == 1 || avago_apds9110_ps_flag == 1 || ams_tmd3725_ps_flag == 1))
+    if (0 == ps_first_start_flag &&  (txc_ps_flag == 1 || ams_tmd2620_ps_flag == 1 || avago_apds9110_ps_flag == 1
+		|| ams_tmd3725_ps_flag == 1 || liteon_ltr582_ps_flag == 1 || apds9999_ps_flag == 1
+		|| ams_tmd3702_ps_flag == 1 || vishay_vcnl36658_ps_flag ==1 || apds9253_006_ps_flag == 1
+		|| ams_tcs3701_ps_flag == 1))
     {
         ret=send_ps_calibrate_data_to_mcu();
         if(ret) hwlog_err( "get_ps_calibrate_data read from nv fail, ret=%d", ret);
@@ -341,55 +468,94 @@ static void get_psensor_calibrate_data(void)
             hwlog_info("read nv success\n");
         }
     }
+    if(0 == ps_first_start_flag && (ams_tof_flag == 1 || sharp_tof_flag == 1)){
+        ret=send_tof_calibrate_data_to_mcu();
+        if(ret){
+            hwlog_err( "get_tof_calibrate_data read from nv fail, ret=%d", ret);
+        }
+        else
+        {
+            hwlog_info("tof read nv success\n");
+        }
+    }
 }
 
 extern int send_als_calibrate_data_to_mcu(void);
 static void get_als_calibrate_data(void)
 {
-    int ret = 0;
-    if ((0 == als_first_start_flag) && ((rohm_rgb_flag == 1) || (avago_rgb_flag == 1) || (ams_tmd3725_rgb_flag == 1)))
-    {
-        ret=send_als_calibrate_data_to_mcu();
-        if(ret) hwlog_err( "get_als_calibrate_data read from nv fail, ret=%d", ret);
-        else
-        {
-            hwlog_info("read nv success\n");
-        }
-    }
+	int ret = 0;
+	int bh1749_flag;
+	bh1749_flag = sensor_get_als_bh1749_flag();
+	if ((0 == als_first_start_flag) &&
+	    ((rohm_rgb_flag == 1) || (avago_rgb_flag == 1) || (ams_tmd3725_rgb_flag == 1) ||
+	     (liteon_ltr582_rgb_flag == 1) || (is_cali_supported == 1) || (apds9999_rgb_flag == 1) ||
+	     (ams_tmd3702_rgb_flag == 1) || (apds9253_rgb_flag == 1) || (vishay_vcnl36658_als_flag == 1) ||
+	     (ams_tcs3701_rgb_flag == 1) || (bh1749_flag == 1))) {
+		ret = send_als_calibrate_data_to_mcu();
+		if (ret) {
+			hwlog_err("get_als_calibrate_data read from nv fail, ret=%d", ret);
+		} else {
+			hwlog_info("read nv success\n");
+		}
+	}
 }
 
 extern int read_gyro_offset_from_nv(void);
 extern int send_gyro_temperature_offset_to_mcu(void);
+
+static void get_gyro1_calibrate_data(void)
+{
+	int ret = 0;
+
+	if(0 == strlen(sensor_chip_info[GYRO1])) {
+		return;
+	}
+	if(0 == gyro1_first_start_flag)
+	{
+		ret=send_gyro1_calibrate_data_to_mcu();
+		if(ret)
+			hwlog_err( "get_gyro1_calibrate_data read from nv fail, ret=%d", ret);
+		else
+			hwlog_info("gyro_sensor read nv success\n");
+	}
+}
+
+void get_als_under_tp_calibrate_data(void)
+{
+	int ret = 0;
+	if ((!als_under_tp_first_start_flag) && (apds9253_rgb_flag || ams_tcs3701_rgb_flag))
+	{
+		ret = send_als_under_tp_calibrate_data_to_mcu();
+		if(ret)
+		{
+			hwlog_err( "get_als_under_tp_calibrate_data read from nv fail, ret=%d", ret);
+		}
+		else
+		{
+			hwlog_info("get_als_under_tp_calibrate_data read nv success\n");
+		}
+	}
+}
 static void get_gyro_calibrate_data(void)
 {
-    int ret = 0;
-    struct device_node *dn = NULL;
-    char *model = NULL;
-    if(0 == strlen(sensor_chip_info[GYRO])){
-        return;
-    }
-    if (0 == gyro_first_start_flag)
-    {
-        ret=send_gyro_calibrate_data_to_mcu();
-        if(ret) hwlog_err( "get_gyro_calibrate_data read from nv fail, ret=%d", ret);
-        else
-        {
-            hwlog_info("gyro_sensor read nv success\n");
-        }
-	for_each_node_with_property(dn, "model") {
-            ret = of_property_read_string(dn, "model", (const char **)&model);
-            if (ret)
-                hwlog_err("get phone model fail ret=%d\n", ret);
-        }
-        hwlog_info("gyro read model info %s\n", model);
-        if (!strncmp(model, "kirin970", strlen("kirin970"))) {
-            ret=send_gyro_temperature_offset_to_mcu();
-            if(ret)
-		hwlog_err( "get_gyro_temperature calibrate_data read from nv fail, ret=%d", ret);
-            else
-                hwlog_info("gyro read temperature offset from nv success\n");
-        }
-    }
+	int ret = 0;
+
+	if(0 == strlen(sensor_chip_info[GYRO])) {
+		return;
+	}
+	if(0 == gyro_first_start_flag)
+	{
+		ret=send_gyro_calibrate_data_to_mcu();
+		if(ret)
+			hwlog_err( "get_gyro_calibrate_data read from nv fail, ret=%d", ret);
+		else
+			hwlog_info("gyro_sensor read nv success\n");
+		ret=send_gyro_temperature_offset_to_mcu();
+		if(ret)
+			hwlog_err( "get_gyro_temperature calibrate_data read from nv fail, ret=%d", ret);
+		else
+			hwlog_info("gyro read temperature offset from nv success\n");
+	}
 }
 
 static void get_handpress_calibrate_data(void)
@@ -410,14 +576,20 @@ static void get_handpress_calibrate_data(void)
 
 static void send_sensor_calib_data(void)
 {
-        get_acc_calibrate_data();
-        get_mag_calibrate_data();
-        get_cap_prox_calibrate_data();
-        get_airpress_calibrate_data();
-        get_psensor_calibrate_data();
-        get_als_calibrate_data();
-        get_gyro_calibrate_data();
+	get_acc_calibrate_data();
+	get_acc1_calibrate_data();
+	get_mag_calibrate_data();
+	get_mag1_calibrate_data();
+	get_cap_prox_calibrate_data();
+	get_cap_prox1_calibrate_data();
+	get_airpress_calibrate_data();
+	get_psensor_calibrate_data();
+	get_als_calibrate_data();
+	get_als_under_tp_calibrate_data();
+	get_gyro_calibrate_data();
+	get_gyro1_calibrate_data();
 	get_handpress_calibrate_data();
+	get_vibrator_calibrate_data();
 }
 
 extern int send_sar_add_data_to_mcu(void);

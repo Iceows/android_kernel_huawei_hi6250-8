@@ -42,17 +42,6 @@ static const struct cas_cmd_map cas_cmd_map_tab[] = {
     {CHB_IOCTL_CA_INTERVAL_SET, -1, TAG_CA, CMD_CMN_INTERVAL_REQ, SUB_CMD_NULL_REQ},
 };
 
-static char * ca_type_str[] = {
-	[CA_TYPE_START] = "start",
-	[CA_TYPE_PICKUP] = "pickup",
-	[CA_TYPE_PUTDOWN] = "putdown",
-	[CA_TYPE_ACTIVITY] = "activity",
-	[CA_TYPE_HOLDING] = "holding",
-	[CA_TYPE_MOTION] = "motion",
-	[CA_TYPE_PLACEMENT] = "placement",
-	[CA_TYPE_END] = "end",
-};
-
 static void update_ca_info(obj_cmd_t cmd, ca_type_t type)
 {
 	switch (cmd) {

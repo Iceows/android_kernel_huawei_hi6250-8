@@ -70,6 +70,7 @@ static struct work_struct redetect_work;
 static const char *str_soft_para = "softiron_parameter";
 
 int akm_cal_algo;
+int mag_threshold_for_als_calibrate = 0;
 
 static int _device_detect(struct device_node *dn, int index, struct sensor_combo_cfg *p_succ_ret);
 
@@ -308,7 +309,6 @@ struct rpc_platform_data rpc_data={
         .table = {0,},
         .mask = {0,},
         .default_value = 0,
-        .rpc_close_flag = 0,
 };
 /*lint +e785*/
 
@@ -480,7 +480,7 @@ void read_sensorlist_info(struct device_node *dn, int sensor)
 		hwlog_info("sensor SENSOR_DETECT_LIST %d get vendor %s\n", sensor, sensorlist_info[sensor].vendor);
 	}
 	else
-		sensorlist_info[sensor].name[0] = '\0';
+		sensorlist_info[sensor].vendor[0] = '\0';
 
 	if (0 == of_property_read_u32(dn, "version", &temp))
 	{
@@ -692,6 +692,11 @@ static void read_mag_data_from_dts(struct device_node *dn)
 					__func__, mag_data.charger_trigger);
 	else
 		mag_data.charger_trigger = (uint8_t)temp;
+
+	if (of_property_read_u32(dn, "threshold_for_als_calibrate", &temp))
+		hwlog_err("%s:read mag threshold_for_als_calibrate fail\n", __func__);
+	else
+		mag_threshold_for_als_calibrate =  temp;
 
 	if (of_property_read_u32(dn, "akm_cal_algo", &temp)) {
 		hwlog_err("%s:read mag akm_cal_algo fail\n", __func__);
@@ -1599,14 +1604,6 @@ static void read_rpc_data_from_dts(struct device_node* dn)
     else
     {rpc_data.default_value = (uint16_t) temp; }
 
-	if (of_property_read_u32(dn, "rpc_close_mode", &temp)){
-		rpc_data.rpc_close_flag = 0;
-		hwlog_err("%s:read rpc_close_mode fail\n", __func__);
-	}
-	else {
-		rpc_data.rpc_close_flag =(uint8_t) temp;
-	}
-
     read_sensorlist_info(dn, RPC);
 }
 
@@ -2075,6 +2072,10 @@ static int key_sensor_detect(struct device_node *dn,
 	}
 	if (chip_type) {
 		ret = of_property_read_u32(dn, "reg_bootloader", &bootloader_reg);
+		if (ret < 0) {
+			hwlog_err("read reg_bootloader err. ret:%d\n", ret);
+			return ret;
+		}
 		hwlog_info("[%s] debug key reg:%d, btld reg:%d\n", __func__, reg, bootloader_reg);
 		msleep(50);
 		ret = mcu_i2c_rw(0, (uint8_t)bootloader_reg, NULL, 0,
@@ -3000,9 +3001,11 @@ int sensor_set_fw_load(void)
 }
 int motion_set_cfg_data(void)
 {
+	int ret;
 	uint8_t app_config[16] = {MOTION_TYPE_ROTATION, CMD_MOTION_SET_PARA_REQ, };
 	memcpy(&app_config[2], &motion_data, min(sizeof(motion_data), sizeof(app_config) - 2));
-	write_customize_cmd_noresp(TAG_MOTION, CMD_CMN_CONFIG_REQ, app_config, sizeof(app_config));
+	ret = write_customize_cmd_noresp(TAG_MOTION, CMD_CMN_CONFIG_REQ, app_config, sizeof(app_config));
+	return ret;
 }
 
 static void redetect_sensor_work_handler(void)
